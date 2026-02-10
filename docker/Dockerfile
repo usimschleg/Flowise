@@ -13,13 +13,26 @@ RUN npm install -g flowise
 FROM node:20-alpine
 
 # Install runtime dependencies
-RUN apk add --no-cache chromium git python3 py3-pip make g++ build-base cairo-dev pango-dev curl
+RUN apk add --no-cache chromium git python3 py3-pip make g++ build-base cairo-dev pango-dev curl proxychains-ng
 
 # Set the environment variable for Puppeteer to find Chromium
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# Create proxychain configuration file
+RUN mkdir -p /etc/proxychains && \
+    echo "# ProxyChains configuration" > /etc/proxychains/proxychains.conf && \
+    echo "strict_chain" >> /etc/proxychains/proxychains.conf && \
+    echo "proxy_dns" >> /etc/proxychains/proxychains.conf && \
+    echo "tcp_read_time_out 15000" >> /etc/proxychains/proxychains.conf && \
+    echo "tcp_connect_time_out 8000" >> /etc/proxychains/proxychains.conf && \
+    echo "[ProxyList]" >> /etc/proxychains/proxychains.conf
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Copy Flowise from the build stage
 COPY --from=build /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=build /usr/local/bin /usr/local/bin
 
-ENTRYPOINT ["flowise", "start"]
+ENTRYPOINT ["/entrypoint.sh"]
