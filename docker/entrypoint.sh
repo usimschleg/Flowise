@@ -25,7 +25,7 @@ if [ -n "$PROXY_TYPE" ] && [ -n "$PROXY_IP" ] && [ -n "$PROXY_PORT" ]; then
         echo "$PROXY_LINE" >> /etc/proxychains/proxychains.conf
     fi
     
-    # Handle NO_PROXY if provided - add localnet entries to proxychains.conf
+    # Handle NO_PROXY if provided - add localnet entries BEFORE ProxyList
     if [ -n "$NO_PROXY" ]; then
         echo "Configuring NO_PROXY entries: $NO_PROXY"
         
@@ -34,7 +34,9 @@ if [ -n "$PROXY_TYPE" ] && [ -n "$PROXY_IP" ] && [ -n "$PROXY_PORT" ]; then
         > "$LOCALNET_ENTRIES"
         
         # Convert comma-separated NO_PROXY list to proxychains localnet format
-        echo "$NO_PROXY" | tr ',' '\n' | while IFS= read -r entry; do
+        # Use a for loop with IFS to avoid subshell issues
+        IFS=',' 
+        for entry in $NO_PROXY; do
             entry=$(echo "$entry" | xargs)  # trim whitespace
             if [ -z "$entry" ]; then
                 continue
@@ -46,27 +48,29 @@ if [ -n "$PROXY_TYPE" ] && [ -n "$PROXY_IP" ] && [ -n "$PROXY_PORT" ]; then
             fi
             echo "$entry" >> "$LOCALNET_ENTRIES"
         done
+        unset IFS
         
-        # Now rebuild proxychains.conf with localnet entries before ProxyList
+        # Now rebuild proxychains.conf with localnet entries BEFORE the [ProxyList] section
         if [ -f "$LOCALNET_ENTRIES" ] && [ -s "$LOCALNET_ENTRIES" ]; then
-            awk '
-                BEGIN { localnet_done = 0 }
-                /^ProxyList/ {
-                    if (!localnet_done) {
-                        print "# Local network addresses (no proxy)"
-                        while (getline line < "/tmp/localnet_entries.txt" > 0) {
-                            print "localnet " line
-                        }
-                        localnet_done = 1
-                    }
-                }
-                { print }
-            ' /etc/proxychains/proxychains.conf > /tmp/proxychains.conf.tmp && \
+            {
+                # Copy everything up to (but not including) [ProxyList]
+                awk '/^\[ProxyList\]/ { exit } { print }' /etc/proxychains/proxychains.conf
+                
+                # Add localnet entries
+                echo "# Local network addresses (no proxy)"
+                while IFS= read -r entry; do
+                    echo "localnet $entry"
+                done < "$LOCALNET_ENTRIES"
+                
+                # Add the [ProxyList] section and the rest
+                awk '/^\[ProxyList\]/ { found = 1 } found { print }' /etc/proxychains/proxychains.conf
+            } > /tmp/proxychains.conf.tmp && \
             mv /tmp/proxychains.conf.tmp /etc/proxychains/proxychains.conf
             
-            cat "$LOCALNET_ENTRIES" | while read -r entry; do
-                echo "  Added localnet: $entry"
-            done
+            echo "  Added NO_PROXY localnet entries:"
+            while read -r entry; do
+                echo "    - $entry"
+            done < "$LOCALNET_ENTRIES"
             rm -f "$LOCALNET_ENTRIES"
         fi
     fi
