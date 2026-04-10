@@ -89,4 +89,11 @@ docker login nexus3.devops.usu.group
 
 # Push to private registry (make sure you're logged in)
 docker push nexus3.devops.usu.group/kcenter/flowise-cskm:<TAG>
+
+# Run local
+docker run -d --name flowise-cskm -p 3000:3000 nexus3.devops.usu.group/kcenter/flowise-cskm:<TAG>
+
+# Run with proxy settings
+docker run -d --name flowise-cskm -e PROXY_TYPE=http -e PROXY_IP=host.docker.internal -e PROXY_PORT=3128 -e NO_PROXY=127.0.0.1 -p 3000:3000
+nexus3.devops.usu.group/kcenter/flowise-cskm:<TAG>
 ```
